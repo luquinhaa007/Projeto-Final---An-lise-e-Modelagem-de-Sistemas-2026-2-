@@ -1,6 +1,6 @@
 import java.util.*;
 
-// Uma variação do sinal (padrão ou regional), com vídeo e consentimento
+// Uma variação do sinal (padrão ou regional), com vídeo e termo de consentimento
 class Sinal {
     static final String RASCUNHO = "Rascunho", PENDENTE = "Pendente de revisão",
             DEVOLVIDO = "Devolvido", REJEITADO = "Rejeitado", PUBLICADO = "Publicado";
@@ -8,12 +8,16 @@ class Sinal {
     Termo termo;
     String tipo, regiao = "";   // tipo: "Padrão" ou "Regional"
     String arquivoVideo;        // nome do vídeo enviado (simulado)
-    boolean consentimento;
+    String arquivoConsentimento; // anexo do termo assinado (simulado)
     String status = RASCUNHO;
     String comentario = "";     // motivo ou ajustes pedidos pelo revisor
 
     String descricao() {
         return regiao.isEmpty() ? tipo : tipo + " - " + regiao;
+    }
+
+    boolean temConsentimento() {
+        return arquivoConsentimento != null;
     }
 }
 
@@ -37,7 +41,8 @@ class Termo {
         for (Sinal s : sinais) {
             if (soPublicados && !s.status.equals(Sinal.PUBLICADO)) continue;
             System.out.println("    Sinal " + s.id + ": " + s.descricao() + " | vídeo: "
-                    + s.arquivoVideo + " | status: " + s.status);
+                    + s.arquivoVideo + " | termo: " + (s.temConsentimento() ? s.arquivoConsentimento : "sem anexo")
+                    + " | status: " + s.status);
             if (!soPublicados && !s.comentario.isEmpty()) {
                 System.out.println("      Comentário do revisor: " + s.comentario);
             }
@@ -98,17 +103,19 @@ public class DicionarioLibras {
         return null;
     }
 
-    // ---------- UPLOAD de vídeo (simulado) ----------
+    // ---------- UPLOAD de anexos (simulado) ----------
     // Não procura arquivo no computador: só pede o nome e confere o formato.
-    static String enviarVideo() {
-        System.out.print("Nome do vídeo (ex.: pai.mp4): ");
+    static String enviarArquivo(String pergunta, String... formatos) {
+        System.out.print(pergunta);
         String nome = teclado.nextLine().trim();
-        if (!nome.toLowerCase().endsWith(".mp4") && !nome.toLowerCase().endsWith(".webm")) {
-            System.out.println("Formato inválido. Use um nome terminado em .mp4 ou .webm.");
-            return null;
+        for (String formato : formatos) {
+            if (nome.toLowerCase().endsWith(formato)) {
+                System.out.println("Enviando... 100%. Upload concluído (simulado): " + nome);
+                return nome;
+            }
         }
-        System.out.println("Enviando... 100%. Upload concluído (simulado): " + nome);
-        return nome;
+        System.out.println("Formato inválido. Use um destes: " + String.join(", ", formatos));
+        return null;
     }
 
     // ---------- CREATE ----------
@@ -148,16 +155,17 @@ public class DicionarioLibras {
         } else {
             s.tipo = "Padrão";
         }
-        s.arquivoVideo = enviarVideo();
+        s.arquivoVideo = enviarArquivo("Nome do vídeo (ex.: pai.mp4): ", ".mp4", ".webm");
         if (s.arquivoVideo == null) return; // sem vídeo válido, o sinal não é criado
 
         boolean menor = lerSimNao("O participante do vídeo tem menos de 18 anos?");
-        s.consentimento = lerSimNao((menor ? "O responsável legal" : "O participante")
-                + " aceitou publicar o vídeo no dicionário aberto?");
+        System.out.println("O vídeo será publicado no dicionário aberto até o consentimento ser retirado.");
+        s.arquivoConsentimento = enviarArquivo("Anexe o termo assinado pelo "
+                + (menor ? "responsável legal" : "participante") + " (ex.: termo.pdf): ", ".pdf", ".jpg", ".png");
         t.sinais.add(s);
         proximoIdSinal++;
         System.out.println("Sinal " + s.id + " salvo como rascunho.");
-        if (!s.consentimento) System.out.println("Sem consentimento, ele não pode ser enviado para revisão.");
+        if (!s.temConsentimento()) System.out.println("Sem o termo anexado, ele não pode ser enviado para revisão.");
     }
 
     // ---------- READ ----------
@@ -206,9 +214,9 @@ public class DicionarioLibras {
             System.out.println("Só rascunhos ou sinais devolvidos podem ser enviados. Status: " + s.status);
             return;
         }
-        if (!s.consentimento) {
-            s.consentimento = lerSimNao("Sem consentimento registrado. O aceite foi dado agora?");
-            if (!s.consentimento) { System.out.println("Envio bloqueado: falta o consentimento."); return; }
+        if (!s.temConsentimento()) {
+            s.arquivoConsentimento = enviarArquivo("Sem termo anexado. Anexe o termo assinado (ex.: termo.pdf): ", ".pdf", ".jpg", ".png");
+            if (!s.temConsentimento()) { System.out.println("Envio bloqueado: falta o consentimento."); return; }
         }
         s.status = Sinal.PENDENTE;
         s.comentario = "";
@@ -234,7 +242,7 @@ public class DicionarioLibras {
 
         int opcao = lerNumero("\n1 - Aprovar   2 - Rejeitar   3 - Pedir ajustes\nDecisão: ");
         if (opcao == 1) {
-            if (!s.consentimento) { // regra da LGPD: sem consentimento, nada é publicado
+            if (!s.temConsentimento()) { // regra da LGPD: sem consentimento, nada é publicado
                 System.out.println("Aprovação bloqueada: consentimento ausente ou revogado.");
                 return;
             }
